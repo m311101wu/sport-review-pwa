@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>動作復盤</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div><p class="eyebrow">SPORT REVIEW</p><h1>動作復盤</h1></div>
+      <label class="upload-button">選擇影片<input id="videoInput" type="file" accept="video/*" /></label>
+    </header>
+
+    <section class="workspace">
+      <div class="video-panel">
+        <div class="video-stage" id="videoStage">
+          <video id="video" playsinline preload="metadata"></video>
+          <canvas id="drawingCanvas"></canvas>
+          <div id="emptyState" class="empty-state"><strong>先選擇一段影片</strong><span>支援 iPhone 相簿影片</span></div>
+        </div>
+        <section class="compare-card" aria-label="影片同框對比">
+          <div class="compare-heading"><div><p class="eyebrow">VIDEO COMPARE</p><h3>影片同框對比</h3></div><label class="compare-upload">加入對比影片<input id="compareVideoInput" type="file" accept="video/*" /></label></div>
+          <div id="compareEmpty" class="compare-empty">先選擇第二段影片，就能與目前影片左右同框比較。</div>
+          <div id="compareStage" class="compare-stage hidden">
+            <div class="compare-view"><span class="compare-label">目前影片</span><video id="comparePrimary" playsinline muted></video></div>
+            <div class="compare-view"><span class="compare-label">對比影片</span><video id="compareVideo" playsinline muted preload="metadata"></video></div>
+          </div>
+          <div class="compare-controls hidden" id="compareControls"><button id="comparePlayBtn" type="button">同步播放</button><button id="comparePauseBtn" type="button">同步暫停</button><button id="compareSyncBtn" type="button">套用對齊</button><label>主片起點 <input id="primaryAlignTime" type="number" min="0" step="0.001" value="0" /> 秒</label><button id="setPrimaryAlignBtn" type="button">用目前時間</button><label>對比片起點 <input id="compareAlignTime" type="number" min="0" step="0.001" value="0" /> 秒</label><button id="setCompareAlignBtn" type="button">用目前時間</button><span id="compareTimeLabel">尚未載入對比影片</span></div>
+          <p class="hint">同框影片會跟著主影片的播放、暫停、拖曳進度與逐幀控制同步；兩段影片可用不同長度，超出範圍時會停在最後一幀。</p>
+        </section>
+        <div class="transport">
+          <button id="playBtn" class="primary" disabled>播放</button>
+          <button id="prevFrameBtn" disabled>上一幀</button>
+          <button id="nextFrameBtn" disabled>下一幀</button>
+          <select id="frameStepSelect" disabled title="逐幀間隔"><option value="30">1/30 秒</option><option value="60" selected>1/60 秒</option><option value="120">1/120 秒</option><option value="180">1/180 秒</option><option value="240">1/240 秒</option></select>
+          <select id="speedSelect" disabled><option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option></select>
+          <button id="loopBtn" disabled>循環：關</button>
+          <span id="timeLabel">00:00.000 / 00:00.000</span>
+        </div>
+        <div class="timeline-wrap">
+          <input id="timeline" class="timeline" type="range" min="0" max="0" step="0.001" value="0" disabled aria-label="影片進度" style="height:30px;cursor:pointer" />
+          <div id="stepEventMarkers" class="step-event-markers" aria-label="腳接觸地板標記"></div>
+        </div>
+        <section class="editor-timeline" id="editorTimeline" aria-label="剪輯軟體式多軌時間軸">
+          <div class="editor-timeline-head"><strong>時間軸</strong><span id="editorTimeLabel">00:00.000</span><div class="timeline-zoom"><button id="timelineZoomOut" type="button">−</button><span id="timelineZoomLabel">100%</span><button id="timelineZoomIn" type="button">＋</button></div></div>
+          <div class="timeline-scroll" id="timelineScroll">
+            <div class="timeline-ruler" id="timelineRuler"></div>
+            <div class="timeline-track"><span class="track-label">影格</span><div class="track-body" id="frameTrack"></div></div>
+            <div class="timeline-track"><span class="track-label right-track">右腳</span><div class="track-body" id="rightTrack"></div></div>
+            <div class="timeline-track"><span class="track-label left-track">左腳</span><div class="track-body" id="leftTrack"></div></div>
+            <div class="timeline-track"><span class="track-label angle-track">角度</span><div class="track-body" id="angleTrack"></div></div>
+            <div class="timeline-track"><span class="track-label note-track">備註</span><div class="track-body" id="noteTrack"></div></div>
+            <div class="timeline-playhead" id="timelinePlayhead"></div>
+          </div>
+          <p class="hint timeline-hint">點擊時間軸跳轉；拖曳標記可微調事件時間。可用下方縮放控制查看密集事件。</p>
+        </section>
+        <section class="waveform-card" aria-label="影片音訊波形">
+          <div class="waveform-heading"><strong>音訊高低起伏</strong><span id="waveformStatus">載入影片後產生波形</span><div class="waveform-actions"><button id="waveformClearBtn" type="button">清空</button><button id="waveformZoomOut" type="button" disabled>−</button><span id="waveformZoomLabel">100%</span><button id="waveformZoomIn" type="button" disabled>＋</button></div></div>
+          <div class="waveform-wrap" id="waveformWrap">
+            <canvas id="audioWaveform" aria-label="音訊波形時間軸"></canvas>
+          </div>
+          <p class="hint">波形越高代表該段聲音能量越強；點擊或拖曳波形可跳到對應時間。</p>
+        </section>
+        <div class="draw-toolbar">
+          <span>畫面標註</span><button data-tool="select" class="tool active">選取</button><button data-tool="line" class="tool">直線</button><button data-tool="arrow" class="tool">箭頭</button><button data-tool="angle" class="tool">角度</button><button data-tool="clear" class="tool danger">清除</button>
+        </div>
+        <p class="hint">角度工具：依序點擊 A 點 → B 頂點 → C 點。手機可在影片上雙指放大／縮小。</p>
+        <section class="calibration-card">
+          <div class="panel-heading compact"><div><p class="eyebrow">SCALE</p><h3>雙物件比例校正</h3></div></div>
+          <p class="hint">單位固定為公分。先暫停影片，再依序在畫面點兩端。</p>
+          <div class="calibration-row"><label>滑步車軸距 <input id="wheelbaseCm" type="number" min="1" step="0.1" placeholder="例如 75" /> <span>cm</span></label><button id="wheelbaseBtn" disabled>點選兩端</button></div>
+          <div class="calibration-row"><label>鞋子外觀長度 <input id="shoeLengthCm" type="number" min="1" step="0.1" placeholder="例如 21" /> <span>cm</span></label><button id="shoeBtn" disabled>點選兩端</button></div>
+          <div id="calibrationStatus" class="calibration-status">尚未設定比例尺</div>
+        </section>
+      </div>
+
+      <aside class="review-panel">
+        <div class="panel-heading"><div><p class="eyebrow">TIMELINE NOTES</p><h2>復盤標記</h2></div><button id="addMarkerBtn" class="primary" disabled>＋目前時間</button></div>
+        <div class="marker-form hidden" id="markerForm">
+          <select id="markerType"><option>做得好</option><option>需要改善</option><option>起跳</option><option>落地</option><option>姿勢</option><option>與教練討論</option></select>
+          <input id="markerNote" placeholder="這個時間點要記錄什麼？" />
+          <div><button id="saveMarkerBtn" class="primary">儲存標記</button><button id="cancelMarkerBtn">取消</button></div>
+        </div>
+        <div id="markerList" class="marker-list"><div class="empty-list">影片載入後，可以在關鍵動作建立標記。</div></div>
+        <section class="analysis-card">
+          <div class="panel-heading compact"><div><p class="eyebrow">RUN ANALYSIS</p><h3>步頻與步態數據</h3></div><button id="clearStepsBtn" class="small-button" disabled>清除</button></div>
+          <p class="hint">鍵盤 ↑：右腳點地／再按一次右腳離地；↓：左腳點地／再按一次左腳離地。←／→ 逐幀。</p>
+          <div class="analysis-mode"><label><input type="radio" name="analysisMode" value="steps" checked> 步數／步頻</label><label><input type="radio" name="analysisMode" value="cycles"> 步態週期</label><label><input type="radio" name="analysisMode" value="single"> 單腳離地數據</label></div>
+          <div class="analysis-actions"><button id="leftStepBtn" disabled>左腳落地</button><button id="rightStepBtn" disabled>右腳落地</button><button id="pointStepBtn" disabled>記錄落地點</button></div>
+          <button id="audioAnalyzeBtn" class="audio-analysis" disabled>🎵 只分析跑台節奏</button>
+          <div id="analysisHint" class="analysis-hint">目前模式：步數／步頻</div>
+          <div id="audioStatus" class="analysis-hint">尚未分析聲音</div>
+          <div id="analysisStats" class="analysis-stats"><div><b>0</b><span>總步數</span></div><div><b>—</b><span>平均步頻</span></div><div><b>—</b><span>平均週期</span></div><div><b>—</b><span>平均步伐</span></div></div>
+          <div class="period-stats" id="periodStats">
+            <div class="period-cell"><strong>前 1/3</strong><b id="periodEarlyCadence">—</b><span>平均步頻</span><b id="periodEarlyCycle">—</b><span>平均週期</span></div>
+            <div class="period-cell"><strong>中 1/3</strong><b id="periodMiddleCadence">—</b><span>平均步頻</span><b id="periodMiddleCycle">—</b><span>平均週期</span></div>
+            <div class="period-cell"><strong>後 1/3</strong><b id="periodLateCadence">—</b><span>平均步頻</span><b id="periodLateCycle">—</b><span>平均週期</span></div>
+          </div>
+          <div class="analysis-table-wrap"><table><thead><tr><th>#</th><th>腳</th><th>點地</th><th>離地</th><th>週期</th><th>距離</th><th>管理</th></tr></thead><tbody id="stepTable"><tr><td colspan="7" class="empty-cell">尚未記錄落地</td></tr></tbody></table></div>
+          <button id="exportAnalysisBtn" class="wide" disabled>匯出完整分析 CSV</button>
+          <section class="single-foot-card" id="singleFootCard">
+            <div class="single-foot-heading"><strong>單腳離地數據</strong><span id="singleFootStatus">請先用 ↑／↓ 標記，再選擇左右腳</span></div>
+            <div class="single-foot-options"><label><input type="radio" name="singleFoot" value="right" checked> 右腳</label><label><input type="radio" name="singleFoot" value="left"> 左腳</label><label><input type="radio" name="singleFoot" value="both"> 雙腳</label><button id="refreshSingleFootBtn" type="button" disabled>重新計算</button></div>
+            <div class="single-foot-stats"><div><b id="singleContactCount">—</b><span>腳部標記</span></div><div><b id="singleStanceAvg">—</b><span>平均支撐</span></div><div><b id="singleFlightAvg">—</b><span>平均離地</span></div></div>
+            <div class="analysis-table-wrap"><table><thead><tr><th>#</th><th>腳</th><th>接地／標記</th><th>離地</th><th>支撐</th><th>滯空</th><th>同腳週期</th></tr></thead><tbody id="singleFootTable"><tr><td colspan="7" class="empty-cell">尚未產生單腳數據</td></tr></tbody></table></div>
+          </section>
+          <section class="single-foot-card alternate-card" id="alternateCard">
+            <div class="single-foot-heading"><strong>左右腳交替時間</strong><span id="alternateStatus">等待左→右→左標記</span></div>
+            <div class="single-foot-stats"><div><b id="alternateLeftRight">—</b><span>左→右</span></div><div><b id="alternateRightLeft">—</b><span>右→左</span></div><div><b id="alternateDiff">—</b><span>差異</span></div><div><b id="alternateCycleAvg">—</b><span>平均完整週期</span></div><div><b id="alternateCount">0</b><span>完整交替組</span></div></div>
+            <div class="analysis-table-wrap"><table><thead><tr><th>#</th><th>順序</th><th>第1腳</th><th>第2腳</th><th>第3腳</th><th>第1→2</th><th>第2→3</th><th>較長段</th><th>完整週期</th></tr></thead><tbody id="alternateTable"><tr><td colspan="9" class="empty-cell">請依序標記左腳→右腳→左腳</td></tr></tbody></table></div>
+          </section>
+        </section>
+        <div class="summary-card"><label for="sessionTitle">本次訓練名稱</label><input id="sessionTitle" value="我的運動復盤" /><label for="overallNote">整體訓練筆記</label><textarea id="overallNote" rows="4" placeholder="今天做得好的地方、下次要改善的地方…"></textarea><button id="exportBtn" class="wide" disabled>匯出復盤摘要</button></div>
+      </aside>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
