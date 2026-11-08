@@ -595,7 +595,7 @@ renderContactMarkers=function(){
   if(!box||!duration||analysisMode!=='start')return;
   const addStart=(time,half=false)=>{
     const b=document.createElement('button');b.type='button';b.className=`step-event-marker start-marker ${half?'start-half-marker':''}`;
-    b.style.left=`${Math.max(0,Math.min(100,time/duration*100))}%`;b.dataset.label=`${half?'1 秒後':'起跑'} ${fmt(time)}`;b.title=`${b.dataset.label}｜單擊跳轉`;
+    b.style.left=`${Math.max(0,Math.min(100,time/duration*100))}%`;b.dataset.time=String(time);b.dataset.label=`${half?'1 秒後':'起跑'} ${fmt(time)}`;b.title=`${b.dataset.label}｜單擊跳轉`;
     b.onclick=()=>{video.pause();video.currentTime=time;render();update()};box.appendChild(b);
   };
   startEvents.forEach(item=>{addStart(item.time);addStart(Number.isFinite(item.halfTime)?item.halfTime:Math.min(duration,item.time+1),true)});
@@ -634,3 +634,19 @@ positionTimelinePlayhead=function(){
   if(left<viewLeft+margin)scroll.scrollLeft=Math.max(0,left-margin);
   else if(left>viewRight-margin)scroll.scrollLeft=Math.min(scroll.scrollWidth-scroll.clientWidth,left-scroll.clientWidth+margin);
 };
+
+// Start markers need a direct jump handler because their track markers are
+// draggable timeline controls; the generic track scrubber can otherwise win
+// the pointer event and leave the video at its previous time.
+function bindStartMarkerJumps(){
+  document.querySelectorAll('#startTrack .timeline-event.start').forEach(marker=>{
+    const jump=event=>{event?.preventDefault();event?.stopPropagation();const t=Number(marker.dataset.time);if(!Number.isFinite(t))return;video.pause();video.currentTime=t;update();render()};
+    marker.onclick=jump;marker.onpointerup=jump;
+  });
+  document.querySelectorAll('#stepEventMarkers .step-event-marker.start-marker').forEach(marker=>{
+    const jump=event=>{event?.preventDefault();event?.stopPropagation();const raw=Number(marker.dataset.time);if(!Number.isFinite(raw))return;video.pause();video.currentTime=raw;update();render()};
+    marker.onclick=jump;marker.onpointerup=jump;
+  });
+}
+const oldRefreshForStartMarkerJump=refreshEditorTimeline;
+refreshEditorTimeline=function(){oldRefreshForStartMarkerJump();bindStartMarkerJumps()};
