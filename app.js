@@ -1,4 +1,4 @@
-const $=s=>document.querySelector(s);const video=$('#video'),stage=$('#videoStage'),canvas=$('#drawingCanvas'),ctx=canvas.getContext('2d');let url=null,markers=[],tool='select',drawing=false,start=null,anglePoints=[],drawings=[];let fps=30,loopStart=null,zoom=1,pointers=new Map(),pinchDistance=0,pinchZoom=1,calibrationMode=null,calibrationPoints=[],calibrations={wheelbase:null,shoe:null};let stepEvents=[],pendingFoot=null,singleFootSamples=[],singleFootRows=[];let analysisMode='linear',startEvents=[];
+const $=s=>document.querySelector(s);const video=$('#video'),stage=$('#videoStage'),canvas=$('#drawingCanvas'),ctx=canvas.getContext('2d');let url=null,markers=[],tool='select',drawing=false,start=null,anglePoints=[],drawings=[];let fps=30,loopStart=null,zoom=1,pointers=new Map(),pinchDistance=0,pinchZoom=1,calibrationMode=null,calibrationPoints=[],calibrations={wheelbase:null,shoe:null};let stepEvents=[],pendingFoot=null,singleFootSamples=[],singleFootRows=[];let analysisMode='linear',startEvents=[],activeStartVelocity=null;
 const buttons=['#playBtn','#prevFrameBtn','#nextFrameBtn','#frameStepSelect','#speedSelect','#loopBtn','#timeline','#addMarkerBtn','#exportBtn','#leftStepBtn','#rightStepBtn','#pointStepBtn','#clearStepsBtn','#exportAnalysisBtn','#audioAnalyzeBtn','#refreshSingleFootBtn','#addStartBtn','#clearStartsBtn'];
 let currentVideoFile=null;
 function fmt(t=0){const m=Math.floor(t/60),s=Math.floor(t%60),ms=Math.floor(t%1*1000);return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(ms).padStart(3,'0')}`}function enable(){buttons.forEach(s=>$(s).disabled=false);$('#wheelbaseBtn').disabled=false;$('#shoeBtn').disabled=false}function resize(){const r=stage.getBoundingClientRect(),d=devicePixelRatio||1;canvas.width=r.width*d;canvas.height=r.height*d;ctx.setTransform(d,0,0,d,0,0);render()}function update(){$('#timeline').value=video.currentTime||0;$('#timeLabel').textContent=`${fmt(video.currentTime)} / ${fmt(video.duration)}`}
@@ -19,7 +19,7 @@ function renderStepAnalysis(){stepEvents.sort((a,b)=>a.time-b.time);const scale=
 function selectedSingleFoot(){return document.querySelector('input[name="singleFoot"]:checked')?.value||'right'}
 function calculateSingleFootRows(){const foot=selectedSingleFoot(),samples=singleFootSamples.filter(s=>s[foot]),contacts=stepEvents.filter(e=>e.foot===foot).sort((a,b)=>a.time-b.time),scale=scaleCmPerPixel(),rows=[];for(let i=0;i<contacts.length-1;i++){const contact=contacts[i],next=contacts[i+1],segment=samples.filter(s=>s.t>=contact.time&&s.t<=next.time&&s[foot]);if(segment.length<2)continue;const base=contact.y,threshold=Math.max(3,(canvas.clientHeight||360)*.018),takeoff=segment.find(s=>s.t>contact.time+.03&&s[foot].y<base-threshold);if(!takeoff)continue;const minY=Math.min(...segment.map(s=>s[foot].y)),heightPx=Math.max(0,base-minY);rows.push({index:rows.length+1,foot,contact:contact.time,takeoff:takeoff.t,stance:takeoff.t-contact.time,flight:next.time-takeoff.t,cycle:next.time-contact.time,heightPx,heightCm:scale?heightPx*scale:null})}return rows}
 function renderSingleFootAnalysis(){singleFootRows=calculateSingleFootRows();const status=$('#singleFootStatus'),tbody=$('#singleFootTable');if(!singleFootSamples.length){status.textContent='請先按「自動分析影片＋聲音」';tbody.innerHTML='<tr><td colspan="7" class="empty-cell">尚未產生單腳數據</td></tr>';$('#exportSingleFootBtn').disabled=true;return}const scale=scaleCmPerPixel(),unit=scale?'cm':'px（請先校正比例尺）';status.textContent=(selectedSingleFoot()==='right'?'右腳':'左腳')+'｜共 '+singleFootRows.length+' 個有效週期｜高度單位：'+unit;const avg=k=>singleFootRows.length?singleFootRows.reduce((a,r)=>a+r[k],0)/singleFootRows.length:null;$('#singleContactCount').textContent=singleFootRows.length||'—';$('#singleStanceAvg').textContent=avg('stance')==null?'—':avg('stance').toFixed(3)+' s';$('#singleFlightAvg').textContent=avg('flight')==null?'—':avg('flight').toFixed(3)+' s';const h=scale?avg('heightCm'):avg('heightPx');$('#singleHeightAvg').textContent=h==null?'—':h.toFixed(1)+' '+(scale?'cm':'px');tbody.innerHTML=singleFootRows.length?singleFootRows.map(r=>'<tr class="single-row" data-time="'+r.contact+'"><td>'+r.index+'</td><td>'+fmt(r.contact)+'</td><td>'+fmt(r.takeoff)+'</td><td>'+r.stance.toFixed(3)+' s</td><td>'+r.flight.toFixed(3)+' s</td><td>'+r.cycle.toFixed(3)+' s</td><td>'+((scale?r.heightCm:r.heightPx).toFixed(1))+' '+(scale?'cm':'px')+'</td></tr>').join(''):'<tr><td colspan="7" class="empty-cell">找不到完整的接地→離地→下一次接地週期，請確認腳踝在畫面中清楚可見。</td></tr>';tbody.querySelectorAll('.single-row').forEach(row=>row.onclick=()=>{video.pause();video.currentTime=+row.dataset.time;render();update()});$('#exportSingleFootBtn').disabled=!singleFootRows.length}
-const originalCanvasDown=canvas.onpointerdown;canvas.onpointerdown=e=>{if(pendingFoot){const r=canvas.getBoundingClientRect();const p={x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom};stepEvents.push({time:video.currentTime,foot:pendingFoot,x:p.x,y:p.y,takeoff:null});activeTakeoffFoot=pendingFoot;pendingFoot=null;$('#analysisHint').textContent='已記錄點地；再按同一個方向鍵記錄離地';renderStepAnalysis();render();return}originalCanvasDown(e)};
+const originalCanvasDown=canvas.onpointerdown;canvas.onpointerdown=e=>{if(activeStartVelocity){const r=canvas.getBoundingClientRect(),p={x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom},item=startEvents[activeStartVelocity.index];if(!item){activeStartVelocity=null;return}if(activeStartVelocity.phase==='start'){item.startWheelPoint=p;item.halfTime=Math.min(video.duration,item.time+.5);activeStartVelocity.phase='half';video.currentTime=item.halfTime;$('#startAnalysisHint').textContent=`已記錄第 ${activeStartVelocity.index+1} 次起跑前輪；請點選 0.5 秒後的前輪中心`;renderStartAnalysis();render();update();return}item.halfWheelPoint=p;activeStartVelocity=null;$('#startAnalysisHint').textContent=`第 ${startEvents.indexOf(item)+1} 次初速度已完成：${startVelocityLabel(item)}`;renderStartAnalysis();render();update();return}if(pendingFoot){const r=canvas.getBoundingClientRect();const p={x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom};stepEvents.push({time:video.currentTime,foot:pendingFoot,x:p.x,y:p.y,takeoff:null});activeTakeoffFoot=pendingFoot;pendingFoot=null;$('#analysisHint').textContent='已記錄點地；再按同一個方向鍵記錄離地';renderStepAnalysis();render();return}originalCanvasDown(e)};
 $('#leftStepBtn').onclick=()=>addStep('left');$('#rightStepBtn').onclick=()=>addStep('right');$('#pointStepBtn').onclick=()=>{pendingFoot=prompt('要記錄哪一腳？輸入 left 或 right','left')?.toLowerCase()==='right'?'right':'left';$('#analysisHint').textContent=`請點選${pendingFoot==='left'?'左':'右'}腳落地位置`};$('#clearStepsBtn').onclick=()=>{stepEvents=[];renderStepAnalysis()};document.querySelectorAll('input[name="analysisMode"]').forEach(r=>r.onchange=()=>$('#analysisHint').textContent=`目前模式：${r.checked&&r.value==='cycles'?'步態週期':'步數／步頻'}`);$('#exportAnalysisBtn').onclick=()=>{const rows=stepEvents.map((e,i)=>({index:i+1,foot:e.foot,time:e.time,cycle_s:e.cycle||'',distance_cm:e.distance||''}));const csv=['index,foot,time_s,cycle_s,distance_cm',...rows.map(r=>`${r.index},${r.foot},${r.time.toFixed(3)},${r.cycle_s},${r.distance_cm}`)].join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='步頻步態數據.csv';a.click()};
 document.querySelectorAll('input[name="singleFoot"]').forEach(r=>r.addEventListener('change',renderSingleFootAnalysis));$('#refreshSingleFootBtn')?.addEventListener('click',renderSingleFootAnalysis);$('#exportSingleFootBtn')?.addEventListener('click',()=>{const scale=scaleCmPerPixel(),csv=['index,foot,contact_s,takeoff_s,stance_s,flight_s,cycle_s,height_'+(scale?'cm':'px'),...singleFootRows.map(r=>[r.index,r.foot,r.contact.toFixed(3),r.takeoff.toFixed(3),r.stance.toFixed(3),r.flight.toFixed(3),r.cycle.toFixed(3),(scale?r.heightCm:r.heightPx).toFixed(1)].join(','))].join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='單腳離地數據.csv';a.click()});
 
@@ -182,7 +182,7 @@ function refreshEditorTimeline(){
   ['frameTrack','leftTrack','rightTrack','startTrack','angleTrack','noteTrack'].forEach(id=>{const el=$(`#${id}`);if(el)el.innerHTML=''});
   const frameBody=$('#frameTrack');if(frameBody){for(let i=0;i<Math.min(160,Math.ceil(video.duration*30));i++){const t=i/30;if(t>video.duration)break;const mark=document.createElement('span');mark.className='frame-tick';mark.style.cssText=`position:absolute;left:${timelinePercent(t)}%;top:9px;height:10px;border-left:1px solid rgba(160,180,215,.28)`;frameBody.appendChild(mark)}frameBody.onclick=e=>jumpFromTimeline(e,frameBody)}
   stepEvents.forEach((item,i)=>{const body=item.foot==='left'?$('#leftTrack'):$('#rightTrack');addTimelineEvent(body,item.time,`${item.foot==='left'?'left':'right'} ${item.needsReview?'review':''}`,`${item.foot==='left'?'左腳':'右腳'} ${fmt(item.time)}${item.needsReview?'（待確認）':''}`,true,t=>{if(t===null){item.time=+((body.querySelectorAll('.timeline-event')[i]||{}).dataset?.time||item.time);renderStepAnalysis()}else item.time=t})});
-  startEvents.forEach((item,i)=>{const body=$('#startTrack');const event=addTimelineEvent(body,item.time,'start',`第 ${i+1} 次起跑 ${fmt(item.time)}`,true,t=>{if(t===null){item.time=+((body.querySelectorAll('.timeline-event')[i]||{}).dataset?.time||item.time);renderStartAnalysis()}else{item.time=t;renderStartAnalysis()}});if(event)event.dataset.startLabel=`第${i+1}次`});
+  startEvents.forEach((item,i)=>{const body=$('#startTrack');const event=addTimelineEvent(body,item.time,'start',`第 ${i+1} 次起跑 ${fmt(item.time)}`,true,t=>{if(t!==null){item.time=t;item.halfTime=Math.min(video.duration,item.time+.5)}renderStartAnalysis()});if(event)event.dataset.startLabel=`第${i+1}次`;const halfTime=Number.isFinite(item.halfTime)?item.halfTime:Math.min(video.duration,item.time+.5);item.halfTime=halfTime;addTimelineEvent(body,halfTime,'start-half',`第 ${i+1} 次起跑後 0.5 秒 ${fmt(halfTime)}`,false)});
   drawings.forEach((d,i)=>{if(d.time==null)d.time=video.currentTime;const body=$('#angleTrack');if(d.kind==='angle')addTimelineEvent(body,d.time,'angle',`角度 ${d.label} ${fmt(d.time)}`,true,t=>{if(t!==null)d.time=t;else refreshEditorTimeline()})});
   markers.forEach((m,i)=>addTimelineEvent($('#noteTrack'),m.time,'note',`${m.type} ${fmt(m.time)}`,true,t=>{if(t!==null)m.time=t;else renderMarkers()}));
   positionTimelinePlayhead();
@@ -190,7 +190,7 @@ function refreshEditorTimeline(){
   const scroll=$('#timelineScroll');if(scroll)scroll.querySelectorAll('.track-body').forEach(body=>body.onclick=e=>{if(e.target===body)jumpFromTimeline(e,body)});
 }
 function recalcAngle(d){const ab=[d.a.x-d.b.x,d.a.y-d.b.y],cb=[d.c.x-d.b.x,d.c.y-d.b.y],den=Math.hypot(...ab)*Math.hypot(...cb),ratio=den?Math.max(-1,Math.min(1,(ab[0]*cb[0]+ab[1]*cb[1])/den)):1;d.label=`${(Math.acos(ratio)*180/Math.PI).toFixed(1)}°`}
-const baseRenderForHandles=render;render=function(){baseRenderForHandles();drawings.filter(d=>d.kind==='angle').forEach(d=>{[['A',d.a],['B',d.b],['C',d.c]].forEach(([label,p])=>{ctx.beginPath();ctx.fillStyle='#f7d774';ctx.strokeStyle='#0b1220';ctx.lineWidth=2;ctx.arc(p.x,p.y,9,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#0b1220';ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,p.x,p.y);ctx.textAlign='start';ctx.textBaseline='alphabetic'})});refreshEditorTimeline()};
+const baseRenderForHandles=render;render=function(){baseRenderForHandles();drawings.filter(d=>d.kind==='angle').forEach(d=>{[['A',d.a],['B',d.b],['C',d.c]].forEach(([label,p])=>{ctx.beginPath();ctx.fillStyle='#f7d774';ctx.strokeStyle='#0b1220';ctx.lineWidth=2;ctx.arc(p.x,p.y,9,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#0b1220';ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,p.x,p.y);ctx.textAlign='start';ctx.textBaseline='alphabetic'})});drawStartVelocityOverlay();refreshEditorTimeline()};
 const previousTimelineDown=canvas.onpointerdown,previousTimelineMove=canvas.onpointermove,previousTimelineUp=canvas.onpointerup;
 canvas.onpointerdown=e=>{if(tool==='select'){const p=point(e);for(let i=drawings.length-1;i>=0;i--){const d=drawings[i];if(d.kind!=='angle')continue;for(const key of ['a','b','c']){if(Math.hypot(p.x-d[key].x,p.y-d[key].y)<20){angleDrag={d,key};canvas.setPointerCapture?.(e.pointerId);return}}}}previousTimelineDown(e)};
 canvas.onpointermove=e=>{if(angleDrag){const p=point(e);angleDrag.d[angleDrag.key]=p;recalcAngle(angleDrag.d);render();return}previousTimelineMove(e)};
@@ -221,11 +221,12 @@ $('#timelineScroll')?.addEventListener('pointercancel',()=>{timelineScrubbing=fa
 // Side-by-side video comparison. The main video remains the source of truth
 // for seeking, playback, slow motion and frame stepping.
 const compareInput=$('#compareVideoInput'),comparePrimary=$('#comparePrimary'),compareVideo=$('#compareVideo');
-let compareUrl=null,compareLoaded=false,compareSyncing=false;
-function alignValue(id,fallback=0){const n=Number($(id)?.value);return Number.isFinite(n)&&n>=0?n:fallback}
-function compareTime(){if(!compareLoaded||!video.duration)return;const primaryStart=Math.min(video.duration,alignValue('#primaryAlignTime'));const compareStart=Math.min(compareVideo.duration||0,alignValue('#compareAlignTime'));const elapsed=Math.max(0,(video.currentTime||0)-primaryStart);const t=Math.max(0,Math.min(compareVideo.duration||0,compareStart+elapsed));for(const v of [comparePrimary]){if(v&&Math.abs((v.currentTime||0)-(video.currentTime||0))>.03){try{v.currentTime=video.currentTime}catch{}}}if(compareVideo&&Math.abs((compareVideo.currentTime||0)-t)>.03){try{compareVideo.currentTime=t}catch{}}const label=$('#compareTimeLabel');if(label)label.textContent=`主片 ${fmt(video.currentTime)}｜對比片 ${fmt(t)}｜起點 ${fmt(primaryStart)} / ${fmt(compareStart)}`}
+let compareUrl=null,compareLoaded=false,compareSyncing=false,comparePicking=false;
+let compareAlignment={primary:0,secondary:0};
+function compareTime(){if(!compareLoaded||!video.duration||comparePicking)return;const primaryStart=Math.min(video.duration,compareAlignment.primary);const compareStart=Math.min(compareVideo.duration||0,compareAlignment.secondary);const elapsed=Math.max(0,(video.currentTime||0)-primaryStart);const t=Math.max(0,Math.min(compareVideo.duration||0,compareStart+elapsed));if(comparePrimary&&Math.abs((comparePrimary.currentTime||0)-(video.currentTime||0))>.03){try{comparePrimary.currentTime=video.currentTime}catch{}}if(compareVideo&&Math.abs((compareVideo.currentTime||0)-t)>.03){try{compareVideo.currentTime=t}catch{}}const label=$('#compareTimeLabel');if(label)label.textContent=`主片 ${fmt(video.currentTime)}｜對比片 ${fmt(t)}｜已對齊 ${fmt(compareAlignment.primary)} ↔ ${fmt(compareAlignment.secondary)}`}
 function compareVisibility(on){$('#compareEmpty')?.classList.toggle('hidden',on);$('#compareStage')?.classList.toggle('hidden',!on);$('#compareControls')?.classList.toggle('hidden',!on)}
-compareInput?.addEventListener('change',e=>{const file=e.target.files?.[0];if(!file)return;if(compareUrl)URL.revokeObjectURL(compareUrl);compareUrl=URL.createObjectURL(file);compareLoaded=false;compareVideo.src=compareUrl;comparePrimary.src=url||'';compareVisibility(false);const label=$('#compareTimeLabel');if(label)label.textContent='正在載入對比影片…'});
+function resetCompare(){if(compareUrl)URL.revokeObjectURL(compareUrl);compareUrl=null;compareLoaded=false;comparePicking=false;compareAlignment={primary:0,secondary:0};if(compareVideo){compareVideo.pause();compareVideo.removeAttribute('src');compareVideo.load()}if(comparePrimary){comparePrimary.pause();comparePrimary.removeAttribute('src');comparePrimary.load()}if(compareInput)compareInput.value='';compareVisibility(false);const label=$('#compareTimeLabel');if(label)label.textContent='先選擇第二段影片，就能與目前影片左右同框比較。'}
+compareInput?.addEventListener('change',e=>{const file=e.target.files?.[0];if(!file)return;resetCompare();compareUrl=URL.createObjectURL(file);compareVideo.src=compareUrl;comparePrimary.src=url||'';const label=$('#compareTimeLabel');if(label)label.textContent='正在載入對比影片…'});
 compareVideo?.addEventListener('loadedmetadata',()=>{compareLoaded=true;compareVisibility(true);compareTime()});
 compareVideo?.addEventListener('error',()=>{compareLoaded=false;compareVisibility(false);const label=$('#compareTimeLabel');if(label)label.textContent='對比影片格式無法讀取，請改用原始 MP4/MOV'});
 video.addEventListener('loadedmetadata',()=>{if(compareLoaded&&comparePrimary)comparePrimary.src=url||'';compareTime()});
@@ -234,10 +235,10 @@ video.addEventListener('play',()=>{if(!compareLoaded)return;compareTime();compar
 video.addEventListener('pause',()=>{if(!compareLoaded)return;comparePrimary.pause();compareVideo.pause()});
 $('#comparePlayBtn')?.addEventListener('click',()=>{if(!compareLoaded)return;compareTime();video.play().catch(()=>{});comparePrimary.play().catch(()=>{});compareVideo.play().catch(()=>{})});
 $('#comparePauseBtn')?.addEventListener('click',()=>{video.pause();comparePrimary?.pause();compareVideo?.pause()});
-$('#compareSyncBtn')?.addEventListener('click',()=>{if(!compareLoaded)return;const primaryStart=Math.min(video.duration,alignValue('#primaryAlignTime'));const compareStart=Math.min(compareVideo.duration||0,alignValue('#compareAlignTime'));video.pause();video.currentTime=primaryStart;compareVideo.currentTime=compareStart;comparePrimary.currentTime=primaryStart;compareTime();render();update()});
-$('#setPrimaryAlignBtn')?.addEventListener('click',()=>{$('#primaryAlignTime').value=(video.currentTime||0).toFixed(3);compareTime()});
-$('#setCompareAlignBtn')?.addEventListener('click',()=>{$('#compareAlignTime').value=(compareVideo.currentTime||0).toFixed(3);compareTime()});
-['#primaryAlignTime','#compareAlignTime'].forEach(id=>$(id)?.addEventListener('input',compareTime));
+$('#comparePickPrimaryBtn')?.addEventListener('click',()=>{if(!compareLoaded)return;compareAlignment.primary=Math.min(video.duration||0,Math.max(0,video.currentTime||0));const label=$('#compareTimeLabel');if(label)label.textContent=`已記住主片 ${fmt(compareAlignment.primary)}；請用對比影片控制列選位置，再按「完成對比片位置」`});
+$('#comparePickCompareBtn')?.addEventListener('click',()=>{if(!compareLoaded)return;if(!comparePicking){comparePicking=true;video.pause();comparePrimary.pause();compareVideo.pause();const label=$('#compareTimeLabel');if(label)label.textContent='請拖曳右側對比影片下方控制列到要對齊的畫面，再按一次此按鈕完成';$('#comparePickCompareBtn').textContent='完成對比片位置';return}compareAlignment.secondary=Math.min(compareVideo.duration||0,Math.max(0,compareVideo.currentTime||0));comparePicking=false;$('#comparePickCompareBtn').textContent='選取對比片位置';compareTime()});
+$('#compareSyncBtn')?.addEventListener('click',()=>{if(!compareLoaded)return;comparePicking=false;video.pause();comparePrimary.pause();compareVideo.pause();video.currentTime=compareAlignment.primary;comparePrimary.currentTime=compareAlignment.primary;compareVideo.currentTime=compareAlignment.secondary;const label=$('#compareTimeLabel');if(label)label.textContent=`已套用：主片 ${fmt(compareAlignment.primary)} ↔ 對比片 ${fmt(compareAlignment.secondary)}；按同步播放開始`;render();update()});
+$('#compareRemoveBtn')?.addEventListener('click',resetCompare);
 
 // Manual ↑/↓ foot marks are valid input for the single-foot report too.
 // Keep the report useful even when no pose samples were generated: contact
@@ -502,36 +503,52 @@ renderSingleFootAnalysis=()=>{
 // Start analysis mode: deliberately independent from foot-count analysis.
 // A single video may contain multiple starts; each marker is a time anchor
 // and can optionally carry the manually measured first-step distance.
+function velocityForStart(item){
+  if(!item.startWheelPoint||!item.halfWheelPoint)return null;
+  const dx=Math.abs(item.halfWheelPoint.x-item.startWheelPoint.x),scale=scaleCmPerPixel();
+  return {distancePx:dx,distanceCm:scale?dx*scale:null,speedPxPerSecond:dx/.5,speedKmh:scale?dx*scale/.5*.036:null};
+}
+function startVelocityLabel(item){
+  const v=velocityForStart(item);if(!v)return '尚未量測';
+  return v.speedKmh==null?`${v.distancePx.toFixed(1)} px｜${v.speedPxPerSecond.toFixed(1)} px/s`:`${v.distanceCm.toFixed(1)} cm｜${v.speedKmh.toFixed(2)} km/h`;
+}
+function beginStartVelocity(index){
+  const item=startEvents[index];if(!item)return;
+  item.halfTime=Math.min(video.duration,item.time+.5);item.startWheelPoint=null;item.halfWheelPoint=null;
+  activeStartVelocity={index,phase:'start'};video.pause();video.currentTime=item.time;
+  $('#startAnalysisHint').textContent=`第 ${index+1} 次：請點選起跑瞬間的前輪中心`;
+  renderStartAnalysis();render();update();
+}
+function drawStartVelocityOverlay(){
+  if(!ctx||!startEvents.length)return;
+  ctx.save();ctx.lineWidth=3;ctx.font='bold 12px sans-serif';ctx.textAlign='center';
+  startEvents.forEach((item,i)=>{
+    const a=item.startWheelPoint,b=item.halfWheelPoint;if(!a&&!b)return;
+    if(a&&b){ctx.strokeStyle='#65e6bd';ctx.setLineDash([6,4]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([])}
+    [[a,'0s'],[b,'0.5s']].forEach(([p,label])=>{if(!p)return;ctx.fillStyle=label==='0s'?'#62e6bd':'#f7d774';ctx.strokeStyle='#091322';ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#091322';ctx.fillText(`${i+1} ${label}`,p.x,p.y-14)});
+  });ctx.restore();
+}
 function renderStartAnalysis(){
-  startEvents.sort((a,b)=>a.time-b.time);
-  const has=Boolean(startEvents.length);
+  startEvents.sort((a,b)=>a.time-b.time);const has=Boolean(startEvents.length);
   const count=$('#startCount'),avg=$('#startFirstDistanceAvg'),best=$('#startBestFirstDistance'),hint=$('#startAnalysisHint'),tbody=$('#startTable');
   const distances=startEvents.map(s=>Number(s.firstStepDistanceCm)).filter(Number.isFinite);
   if(count)count.textContent=String(startEvents.length);
   if(avg)avg.textContent=distances.length?`${(distances.reduce((a,b)=>a+b,0)/distances.length).toFixed(1)} cm`:'—';
   if(best)best.textContent=distances.length?`${Math.max(...distances).toFixed(1)} cm`:'—';
-  if(hint)hint.textContent=has?`已標記 ${startEvents.length} 次起跑；點擊列表可跳轉，拖曳時間軸標記可微調`:'尚未標記起跑';
-  if(tbody)tbody.innerHTML=has?startEvents.map((s,i)=>`<tr class="start-row" data-index="${i}" data-time="${s.time}"><td>${i+1}</td><td>${fmt(s.time)}</td><td><input class="start-distance-input" type="number" min="0" step="0.1" value="${Number.isFinite(Number(s.firstStepDistanceCm))?s.firstStepDistanceCm:''}" placeholder="—" aria-label="第${i+1}次第一步距離" /> cm</td><td><button type="button" class="start-delete" title="刪除第${i+1}次起跑">×</button></td></tr>`).join(''):'<tr><td colspan="4" class="empty-cell">尚未標記起跑</td></tr>';
-  tbody?.querySelectorAll('.start-row').forEach(row=>{
-    const i=+row.dataset.index;
-    row.onclick=()=>{video.pause();video.currentTime=startEvents[i].time;render();update()};
-    row.querySelector('.start-delete').onclick=e=>{e.stopPropagation();startEvents.splice(i,1);renderStartAnalysis();refreshEditorTimeline()};
-    row.querySelector('.start-distance-input').onclick=e=>e.stopPropagation();
-    row.querySelector('.start-distance-input').onchange=e=>{const value=Number(e.target.value);startEvents[i].firstStepDistanceCm=Number.isFinite(value)&&value>=0?value:null;renderStartAnalysis();refreshEditorTimeline()};
-  });
-  const clear=$('#clearStartsBtn');if(clear)clear.disabled=!has;
-  const add=$('#addStartBtn');if(add)add.disabled=!video.duration;
-  refreshEditorTimeline();
+  if(hint&&(!activeStartVelocity))hint.textContent=has?`已標記 ${startEvents.length} 次起跑；每次起跑後 0.5 秒已自動標記`:'尚未標記起跑';
+  if(tbody)tbody.innerHTML=has?startEvents.map((s,i)=>{const v=velocityForStart(s);return `<tr class="start-row" data-index="${i}" data-time="${s.time}"><td>${i+1}</td><td>${fmt(s.time)}</td><td>${fmt(s.halfTime??Math.min(video.duration||0,s.time+.5))}</td><td><input class="start-distance-input" type="number" min="0" step="0.1" value="${Number.isFinite(Number(s.firstStepDistanceCm))?s.firstStepDistanceCm:''}" placeholder="—" aria-label="第${i+1}次第一步距離" /> cm</td><td>${v?(v.distanceCm==null?`${v.distancePx.toFixed(1)} px`:`${v.distanceCm.toFixed(1)} cm`):'—'}</td><td><button type="button" class="start-velocity" title="量測起跑前輪初速度">初速度</button><span class="start-velocity-value">${startVelocityLabel(s)}</span></td><td><button type="button" class="start-delete" title="刪除第${i+1}次起跑">×</button></td></tr>`}).join(''):'<tr><td colspan="7" class="empty-cell">尚未標記起跑</td></tr>';
+  tbody?.querySelectorAll('.start-row').forEach(row=>{const i=+row.dataset.index;row.onclick=()=>{video.pause();video.currentTime=startEvents[i].time;render();update()};row.querySelector('.start-delete').onclick=e=>{e.stopPropagation();if(activeStartVelocity?.index===i)activeStartVelocity=null;startEvents.splice(i,1);renderStartAnalysis();refreshEditorTimeline()};row.querySelector('.start-velocity').onclick=e=>{e.stopPropagation();beginStartVelocity(i)};row.querySelector('.start-distance-input').onclick=e=>e.stopPropagation();row.querySelector('.start-distance-input').onchange=e=>{const value=Number(e.target.value);startEvents[i].firstStepDistanceCm=Number.isFinite(value)&&value>=0?value:null;renderStartAnalysis();refreshEditorTimeline()}});
+  const clear=$('#clearStartsBtn');if(clear)clear.disabled=!has;const add=$('#addStartBtn');if(add)add.disabled=!video.duration;refreshEditorTimeline();render();
 }
 $('#addStartBtn')?.addEventListener('click',()=>{
   if(!video.duration)return;
   const raw=$('#firstStepDistanceCm')?.value.trim()||'';
   const value=raw===''?null:Number(raw);
-  startEvents.push({time:video.currentTime,firstStepDistanceCm:Number.isFinite(value)&&value>=0?value:null});
+  startEvents.push({time:video.currentTime,halfTime:Math.min(video.duration,video.currentTime+.5),firstStepDistanceCm:Number.isFinite(value)&&value>=0?value:null});
   if($('#firstStepDistanceCm'))$('#firstStepDistanceCm').value='';
   renderStartAnalysis();
 });
-$('#clearStartsBtn')?.addEventListener('click',()=>{startEvents=[];renderStartAnalysis()});
+$('#clearStartsBtn')?.addEventListener('click',()=>{startEvents=[];activeStartVelocity=null;renderStartAnalysis()});
 function setAnalysisMode(mode){
   analysisMode=mode;
   document.body.classList.toggle('start-mode',mode==='start');

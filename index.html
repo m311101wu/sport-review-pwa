@@ -32,10 +32,10 @@
           <div id="compareEmpty" class="compare-empty">先選擇第二段影片，就能與目前影片左右同框比較。</div>
           <div id="compareStage" class="compare-stage hidden">
             <div class="compare-view"><span class="compare-label">目前影片</span><video id="comparePrimary" playsinline muted></video></div>
-            <div class="compare-view"><span class="compare-label">對比影片</span><video id="compareVideo" playsinline muted preload="metadata"></video></div>
+            <div class="compare-view"><span class="compare-label">對比影片</span><video id="compareVideo" playsinline muted preload="metadata" controls></video></div>
           </div>
-          <div class="compare-controls hidden" id="compareControls"><button id="comparePlayBtn" type="button">同步播放</button><button id="comparePauseBtn" type="button">同步暫停</button><button id="compareSyncBtn" type="button">套用對齊</button><label>主片起點 <input id="primaryAlignTime" type="number" min="0" step="0.001" value="0" /> 秒</label><button id="setPrimaryAlignBtn" type="button">用目前時間</button><label>對比片起點 <input id="compareAlignTime" type="number" min="0" step="0.001" value="0" /> 秒</label><button id="setCompareAlignBtn" type="button">用目前時間</button><span id="compareTimeLabel">尚未載入對比影片</span></div>
-          <p class="hint">同框影片會跟著主影片的播放、暫停、拖曳進度與逐幀控制同步；兩段影片可用不同長度，超出範圍時會停在最後一幀。</p>
+          <div class="compare-controls hidden" id="compareControls"><button id="comparePlayBtn" type="button">同步播放</button><button id="comparePauseBtn" type="button">同步暫停</button><button id="comparePickPrimaryBtn" type="button">記住主片位置</button><button id="comparePickCompareBtn" type="button">選取對比片位置</button><button id="compareSyncBtn" type="button" class="compare-apply">套用對齊</button><button id="compareRemoveBtn" type="button" class="compare-remove">刪除對比影片</button><span id="compareTimeLabel">先在兩支影片選好位置，再按套用對齊</span></div>
+          <p class="hint">簡化對齊：主片用上方時間軸停在起點後按「記住主片位置」；對比片可用右側影片下方控制列停在起點，再按「完成對比片位置」，最後按「套用對齊」。</p>
         </section>
         <div class="transport">
           <button id="playBtn" class="primary" disabled>播放</button>
@@ -126,7 +126,7 @@
           <div class="start-input-row"><label>第一步距離 <input id="firstStepDistanceCm" type="number" min="0" step="0.1" placeholder="可選，cm" /> <span>cm</span></label><button id="addStartBtn" class="primary" type="button" disabled>標記目前起跑</button></div>
           <div id="startAnalysisHint" class="analysis-hint">尚未標記起跑</div>
           <div class="start-stats"><div><b id="startCount">0</b><span>起跑次數</span></div><div><b id="startFirstDistanceAvg">—</b><span>第一步平均距離</span></div><div><b id="startBestFirstDistance">—</b><span>最長第一步</span></div></div>
-          <div class="analysis-table-wrap"><table><thead><tr><th>#</th><th>起跑時間</th><th>第一步距離</th><th>管理</th></tr></thead><tbody id="startTable"><tr><td colspan="4" class="empty-cell">尚未標記起跑</td></tr></tbody></table></div>
+          <div class="analysis-table-wrap"><table><thead><tr><th>#</th><th>起跑時間</th><th>0.5 秒</th><th>第一步距離</th><th>前輪位移</th><th>初速度</th><th>管理</th></tr></thead><tbody id="startTable"><tr><td colspan="7" class="empty-cell">尚未標記起跑</td></tr></tbody></table></div>
           <p class="hint">第一步距離可先輸入估計值；之後也可以用比例尺或場地標線補上。距離不填時仍會保留起跑時間。</p>
         </section>
         <div class="summary-card"><label for="sessionTitle">本次訓練名稱</label><input id="sessionTitle" value="我的運動復盤" /><label for="overallNote">整體訓練筆記</label><textarea id="overallNote" rows="4" placeholder="今天做得好的地方、下次要改善的地方…"></textarea><button id="exportBtn" class="wide" disabled>匯出復盤摘要</button></div>
