@@ -24,3 +24,4 @@
 .start-mode .linear-analysis-panel{display:none!important}.start-mode .foot-track{display:none}.start-mode #stepEventMarkers{display:none}
 .upload-actions{display:flex;align-items:center;gap:8px}.clear-video-button{border:1px solid #74434b;background:#271b27;color:#ffb0b0;border-radius:10px;padding:11px 13px;cursor:pointer}.clear-video-button:hover{border-color:#ff8e9a}
 .timeline-event.start-half::after{content:'1s'}
+.step-event-marker.start-marker{background:#f7d774;border-color:#241f0d;box-shadow:0 0 0 1px #f7d77499}.step-event-marker.start-half-marker{background:#f0a85e;border-radius:3px;border-color:#241f0d}

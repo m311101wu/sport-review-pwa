@@ -562,3 +562,41 @@ function setAnalysisMode(mode){
 }
 document.querySelectorAll('.mode-tab').forEach(tab=>tab.addEventListener('click',()=>setAnalysisMode(tab.dataset.mode)));
 setAnalysisMode('linear');
+
+// Extra 50 cm reference calibration and robust start markers.  The reference
+// calibration is intentionally preferred because it is the object Han wants
+// to use for the start-distance measurement.
+calibrations.object50=calibrations.object50||null;
+const originalScaleCmPerPixel=scaleCmPerPixel;
+scaleCmPerPixel=function(){return calibrations.object50?.cmPerPixel||originalScaleCmPerPixel()};
+const originalCalibrationStatus=updateCalibrationStatus;
+updateCalibrationStatus=function(message){
+  const box=$('#calibrationStatus');if(!box)return;
+  if(message){box.textContent=message;return}
+  const o=calibrations.object50,w=calibrations.wheelbase,s=calibrations.shoe;
+  if(!o&&!w&&!s){box.textContent='尚未設定比例尺';return}
+  const text=[];if(o)text.push(`物件 50 cm：${o.px.toFixed(1)} px（目前使用）`);if(w)text.push(`軸距：${w.cm} cm`);if(s)text.push(`鞋長：${s.cm} cm`);box.textContent=text.join('　');
+};
+function finishObject50Calibration(){
+  if(calibrationPoints.length!==2){updateCalibrationStatus('請先在畫面點選 50 公分物件的兩端');return}
+  const px=Math.hypot(calibrationPoints[1].x-calibrationPoints[0].x,calibrationPoints[1].y-calibrationPoints[0].y);
+  calibrations.object50={cm:50,px,cmPerPixel:50/px};calibrationMode=null;calibrationPoints=[];updateCalibrationStatus();render();
+}
+const originalFinishCalibration=finishCalibration;
+finishCalibration=function(){if(calibrationMode==='object50')finishObject50Calibration();else originalFinishCalibration()};
+$('#object50Btn')?.addEventListener('click',()=>{calibrationMode='object50';calibrationPoints=[];tool='select';updateCalibrationStatus('請在畫面點選 50 公分物件的兩端')});
+const oldEnable=enable;enable=()=>{oldEnable();if($('#object50Btn'))$('#object50Btn').disabled=false};
+$('#clearVideoBtn')?.addEventListener('click',()=>{calibrations.object50=null;updateCalibrationStatus()});
+
+const originalRenderContactMarkers=renderContactMarkers;
+renderContactMarkers=function(){
+  originalRenderContactMarkers();
+  const box=$('#stepEventMarkers'),duration=video.duration||0;
+  if(!box||!duration||analysisMode!=='start')return;
+  const addStart=(time,half=false)=>{
+    const b=document.createElement('button');b.type='button';b.className=`step-event-marker start-marker ${half?'start-half-marker':''}`;
+    b.style.left=`${Math.max(0,Math.min(100,time/duration*100))}%`;b.dataset.label=`${half?'1 秒後':'起跑'} ${fmt(time)}`;b.title=`${b.dataset.label}｜單擊跳轉`;
+    b.onclick=()=>{video.pause();video.currentTime=time;render();update()};box.appendChild(b);
+  };
+  startEvents.forEach(item=>{addStart(item.time);addStart(Number.isFinite(item.halfTime)?item.halfTime:Math.min(duration,item.time+1),true)});
+};
