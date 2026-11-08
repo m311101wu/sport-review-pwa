@@ -30,7 +30,10 @@ const waveformCanvas=$('#audioWaveform'),waveformCtx=waveformCanvas?.getContext(
 function drawWaveform(){
   if(!waveformCanvas||!waveformCtx)return;
   updateWaveformControls?.();
-  const wrap=waveformCanvas.parentElement,r=waveformCanvas.getBoundingClientRect(),d=devicePixelRatio||1,w=Math.max(1,(wrap?.clientWidth||r.width)*waveformZoom),h=Math.max(1,r.height),mid=h/2;
+  // The waveform uses the exact same content width as the editor timeline.
+  // Keeping one coordinate system makes the red playhead and all timeline
+  // markers line up at every zoom level.
+  const wrap=waveformCanvas.parentElement,r=waveformCanvas.getBoundingClientRect(),d=devicePixelRatio||1,w=Math.max(1,typeof editorTimelineWidth==='function'?editorTimelineWidth():(wrap?.clientWidth||r.width)*waveformZoom),h=Math.max(1,r.height),mid=h/2;
   waveformCanvas.style.width=`${w}px`;
   waveformCanvas.width=w*d;waveformCanvas.height=h*d;waveformCtx.setTransform(d,0,0,d,0,0);waveformCtx.clearRect(0,0,w,h);
   waveformCtx.fillStyle='#0a1424';waveformCtx.fillRect(0,0,w,h);
@@ -80,9 +83,9 @@ video.addEventListener('timeupdate',drawWaveform);
 video.addEventListener('play',()=>{if(liveAudioContext?.state==='suspended')liveAudioContext.resume();if(!liveWaveformTimer)liveWaveformTimer=setInterval(sampleLiveWaveform,60)});
 video.addEventListener('pause',()=>{if(liveWaveformTimer){clearInterval(liveWaveformTimer);liveWaveformTimer=null}});
 video.addEventListener('ended',()=>{if(liveWaveformTimer){clearInterval(liveWaveformTimer);liveWaveformTimer=null}if(waveformData?.length){const status=$('#waveformStatus');if(status?.textContent.startsWith('iPhone'))status.textContent='音訊波形已保留，可重播查看'}});
-function updateWaveformControls(){const has=Boolean(waveformData?.length);const out=$('#waveformZoomOut'),inn=$('#waveformZoomIn'),clear=$('#waveformClearBtn');if(out)out.disabled=!has||waveformZoom<=1;if(inn)inn.disabled=!has||waveformZoom>=8;if(clear)clear.disabled=!has;const label=$('#waveformZoomLabel');if(label)label.textContent=`${Math.round(waveformZoom*100)}%`}
-$('#waveformZoomIn')?.addEventListener('click',()=>{waveformZoom=Math.min(8,waveformZoom*1.5);drawWaveform();updateWaveformControls()});
-$('#waveformZoomOut')?.addEventListener('click',()=>{waveformZoom=Math.max(1,waveformZoom/1.5);drawWaveform();updateWaveformControls()});
+function updateWaveformControls(){const has=Boolean(waveformData?.length),zoomValue=typeof editorTimelineZoom==='number'?editorTimelineZoom:waveformZoom;const out=$('#waveformZoomOut'),inn=$('#waveformZoomIn'),clear=$('#waveformClearBtn');if(out)out.disabled=!has||zoomValue<=.1;if(inn)inn.disabled=!has||zoomValue>=10;if(clear)clear.disabled=!has;const label=$('#waveformZoomLabel');if(label)label.textContent=`${Math.round(zoomValue*100)}%`}
+$('#waveformZoomIn')?.addEventListener('click',()=>{if(typeof editorTimelineZoom==='number'){editorTimelineZoom=Math.min(10,editorTimelineZoom*1.25);refreshEditorTimeline()}else{waveformZoom=Math.min(10,waveformZoom*1.25);drawWaveform()}updateWaveformControls()});
+$('#waveformZoomOut')?.addEventListener('click',()=>{if(typeof editorTimelineZoom==='number'){editorTimelineZoom=Math.max(.1,editorTimelineZoom/1.25);refreshEditorTimeline()}else{waveformZoom=Math.max(.1,waveformZoom/1.25);drawWaveform()}updateWaveformControls()});
 $('#waveformClearBtn')?.addEventListener('click',()=>{waveformData=null;liveWaveformBins=[];waveformZoom=1;const status=$('#waveformStatus');if(status)status.textContent='波形已清空；按播放重新累積';drawWaveform();updateWaveformControls()});
 async function detectAudioBeats(){
   if(!url)return[];
@@ -154,7 +157,7 @@ $('#audioAnalyzeBtn').onclick=async()=>{if(!video.duration)return;const btn=$('#
 
 // Editor-style multi-track timeline and editable A/B/C angle handles.
 let editorTimelineZoom=1, angleDrag=null;
-function editorTimelineWidth(){return Math.max(666,(video.duration||0)*100*editorTimelineZoom)}
+function editorTimelineWidth(){return Math.max(1,(video.duration||0)*100*editorTimelineZoom)}
 function timelinePercent(time){return video.duration?Math.max(0,Math.min(100,time/video.duration*100)):0}
 function positionTimelinePlayhead(){
   const playhead=$('#timelinePlayhead');
@@ -163,6 +166,18 @@ function positionTimelinePlayhead(){
   const width=body?.getBoundingClientRect().width||editorTimelineWidth();
   playhead.style.left=`${54+(video.currentTime||0)/video.duration*width}px`;
 }
+let syncingTimelineScroll=false;
+function syncWaveformScroll(source){
+  const timeline=$('#timelineScroll'),waveform=$('#waveformWrap');
+  if(!timeline||!waveform||syncingTimelineScroll)return;
+  syncingTimelineScroll=true;
+  if(source===timeline)waveform.scrollLeft=timeline.scrollLeft;
+  else if(source===waveform)timeline.scrollLeft=waveform.scrollLeft;
+  else waveform.scrollLeft=timeline.scrollLeft;
+  syncingTimelineScroll=false;
+}
+$('#timelineScroll')?.addEventListener('scroll',e=>syncWaveformScroll(e.currentTarget));
+$('#waveformWrap')?.addEventListener('scroll',e=>syncWaveformScroll(e.currentTarget));
 function jumpFromTimeline(event, body){
   if(!video.duration)return;
   const rect=body.getBoundingClientRect(), x=Math.max(0,Math.min(rect.width,event.clientX-rect.left));
@@ -177,7 +192,7 @@ function addTimelineEvent(body,time,kind,label,draggable=false,onMove=null){
 }
 function refreshEditorTimeline(){
   const root=$('#editorTimeline');if(!root||!video.duration)return;
-  const width=editorTimelineWidth();document.querySelectorAll('.track-body,.timeline-ruler').forEach(el=>{el.style.width=`${width}px`;el.style.minWidth=`${width}px`;el.style.flex=`0 0 ${width}px`});
+  const width=editorTimelineWidth();document.querySelectorAll('.timeline-track,.track-body,.timeline-ruler').forEach(el=>{el.style.width=`${width}px`;el.style.minWidth=`${width}px`;el.style.flex=`0 0 ${width}px`});
   const ruler=$('#timelineRuler');ruler.innerHTML='';const tickCount=Math.max(2,Math.ceil(video.duration));
   for(let i=0;i<=tickCount;i++){const t=Math.min(video.duration,i);const tick=document.createElement('span');tick.className='ruler-tick';tick.style.left=`${timelinePercent(t)}%`;tick.textContent=fmt(t).slice(0,5);ruler.appendChild(tick)}
   ['frameTrack','leftTrack','rightTrack','startTrack','angleTrack','noteTrack'].forEach(id=>{const el=$(`#${id}`);if(el)el.innerHTML=''});
@@ -187,7 +202,7 @@ function refreshEditorTimeline(){
   drawings.forEach((d,i)=>{if(d.time==null)d.time=video.currentTime;const body=$('#angleTrack');if(d.kind==='angle')addTimelineEvent(body,d.time,'angle',`角度 ${d.label} ${fmt(d.time)}`,true,t=>{if(t!==null)d.time=t;else refreshEditorTimeline()})});
   markers.forEach((m,i)=>addTimelineEvent($('#noteTrack'),m.time,'note',`${m.type} ${fmt(m.time)}`,true,t=>{if(t!==null)m.time=t;else renderMarkers()}));
   positionTimelinePlayhead();
-  const label=$('#editorTimeLabel');if(label)label.textContent=fmt(video.currentTime||0);const zoomLabel=$('#timelineZoomLabel');if(zoomLabel)zoomLabel.textContent=`${Math.round(editorTimelineZoom*100)}%`;
+  const label=$('#editorTimeLabel');if(label)label.textContent=fmt(video.currentTime||0);const zoomLabel=$('#timelineZoomLabel');if(zoomLabel)zoomLabel.textContent=`${Math.round(editorTimelineZoom*100)}%`;drawWaveform();updateWaveformControls();syncWaveformScroll();
   const scroll=$('#timelineScroll');if(scroll)scroll.querySelectorAll('.track-body').forEach(body=>body.onclick=e=>{if(e.target===body)jumpFromTimeline(e,body)});
 }
 function recalcAngle(d){const ab=[d.a.x-d.b.x,d.a.y-d.b.y],cb=[d.c.x-d.b.x,d.c.y-d.b.y],den=Math.hypot(...ab)*Math.hypot(...cb),ratio=den?Math.max(-1,Math.min(1,(ab[0]*cb[0]+ab[1]*cb[1])/den)):1;d.label=`${(Math.acos(ratio)*180/Math.PI).toFixed(1)}°`}
@@ -199,7 +214,7 @@ canvas.onpointerup=e=>{if(angleDrag){angleDrag=null;canvas.releasePointerCapture
 const oldUpdate=update;update=function(){oldUpdate();positionTimelinePlayhead();const l=$('#editorTimeLabel');if(l)l.textContent=fmt(video.currentTime||0)};
 const oldRenderMarkers=renderMarkers;renderMarkers=function(){oldRenderMarkers();refreshEditorTimeline()};
 const oldRenderStepAnalysis=renderStepAnalysis;renderStepAnalysis=function(){oldRenderStepAnalysis();refreshEditorTimeline()};
-$('#timelineZoomIn')?.addEventListener('click',()=>{editorTimelineZoom=Math.min(10,editorTimelineZoom*1.25);refreshEditorTimeline()});$('#timelineZoomOut')?.addEventListener('click',()=>{editorTimelineZoom=Math.max(.5,editorTimelineZoom/1.25);refreshEditorTimeline()});
+$('#timelineZoomIn')?.addEventListener('click',()=>{editorTimelineZoom=Math.min(10,editorTimelineZoom*1.25);refreshEditorTimeline()});$('#timelineZoomOut')?.addEventListener('click',()=>{editorTimelineZoom=Math.max(.1,editorTimelineZoom/1.25);refreshEditorTimeline()});
 
 // Drag anywhere on the editor timeline to scrub the main video. The event
 // markers keep their own click/drag behavior and are excluded here.
@@ -633,6 +648,7 @@ positionTimelinePlayhead=function(){
   const left=playhead.offsetLeft,margin=48,viewLeft=scroll.scrollLeft,viewRight=viewLeft+scroll.clientWidth;
   if(left<viewLeft+margin)scroll.scrollLeft=Math.max(0,left-margin);
   else if(left>viewRight-margin)scroll.scrollLeft=Math.min(scroll.scrollWidth-scroll.clientWidth,left-scroll.clientWidth+margin);
+  syncWaveformScroll(scroll);
 };
 
 // Start markers need a direct jump handler because their track markers are
