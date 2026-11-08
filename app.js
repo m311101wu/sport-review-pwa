@@ -600,3 +600,20 @@ renderContactMarkers=function(){
   };
   startEvents.forEach(item=>{addStart(item.time);addStart(Number.isFinite(item.halfTime)?item.halfTime:Math.min(duration,item.time+1),true)});
 };
+
+// Keep wheel-point overlays tied to their exact video moments.  The timeline
+// markers remain persistent, but the A/B points are shown only when the video
+// is on the corresponding start frame or one-second frame.
+drawStartVelocityOverlay=function(){
+  if(!ctx||!startEvents.length)return;
+  const tolerance=Math.max(0.045,1/(fps||30)*1.5),now=video.currentTime||0;
+  ctx.save();ctx.lineWidth=3;ctx.font='bold 12px sans-serif';ctx.textAlign='center';
+  startEvents.forEach((item,i)=>{
+    const showA=item.startWheelPoint&&Math.abs(now-item.time)<=tolerance;
+    const showB=item.halfWheelPoint&&Math.abs(now-(item.halfTime??item.time+1))<=tolerance;
+    const a=showA?item.startWheelPoint:null,b=showB?item.halfWheelPoint:null;
+    if(!a&&!b)return;
+    if(a&&b){ctx.strokeStyle='#65e6bd';ctx.setLineDash([6,4]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([])}
+    [[a,'0s'],[b,'1s']].forEach(([p,label])=>{if(!p)return;ctx.fillStyle=label==='0s'?'#62e6bd':'#f7d774';ctx.strokeStyle='#091322';ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#091322';ctx.fillText(`${i+1} ${label}`,p.x,p.y-14)});
+  });ctx.restore();
+};
