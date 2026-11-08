@@ -11,7 +11,7 @@ function updateCalibrationStatus(message){const box=$('#calibrationStatus');if(m
 function finishCalibration(){const cm=+(calibrationMode==='wheelbase'?$('#wheelbaseCm').value:$('#shoeLengthCm').value);if(!cm||calibrationPoints.length!==2){updateCalibrationStatus('請先輸入公分數值，再點選兩端');return}const px=Math.hypot(calibrationPoints[1].x-calibrationPoints[0].x,calibrationPoints[1].y-calibrationPoints[0].y);calibrations[calibrationMode]={cm,px,cmPerPixel:cm/px};calibrationMode=null;calibrationPoints=[];updateCalibrationStatus();render()}['wheelbase','shoe'].forEach(kind=>{$(`#${kind}Btn`).onclick=()=>{calibrationMode=kind;calibrationPoints=[];tool='select';updateCalibrationStatus(`請在畫面點選${kind==='wheelbase'?'滑步車軸距':'鞋子外觀長度'}的兩端`)}});
 canvas.onpointerdown=e=>{pointers.set(e.pointerId,e);canvas.setPointerCapture?.(e.pointerId);if(pointers.size===2){drawing=false;const p=[...pointers.values()];pinchDistance=distance(p[0],p[1]);pinchZoom=zoom;return}const p=point(e);if(calibrationMode){calibrationPoints.push(p);if(calibrationPoints.length===2)finishCalibration();else updateCalibrationStatus('已選第一端，請再點選另一端');return}if(tool==='select')return;drawing=true;start=p;if(tool==='angle'){anglePoints.push(start);if(anglePoints.length===3){const[a,b,c]=anglePoints,ab=[a.x-b.x,a.y-b.y],cb=[c.x-b.x,c.y-b.y],den=Math.hypot(...ab)*Math.hypot(...cb),ratio=den?Math.max(-1,Math.min(1,(ab[0]*cb[0]+ab[1]*cb[1])/den)):1,deg=Math.acos(ratio)*180/Math.PI;drawings.push({kind:'angle',a,b,c,label:`${deg.toFixed(1)}°`});anglePoints=[];drawing=false;render()}}};canvas.onpointermove=e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,e);if(pointers.size===2){const p=[...pointers.values()];if(pinchDistance)zoom=pinchZoom*distance(p[0],p[1])/pinchDistance;applyZoom()}};canvas.onpointerup=canvas.onpointercancel=e=>{pointers.delete(e.pointerId);if(pointers.size<2)pinchDistance=0;if(!drawing)return;const end=point(e);if(tool==='line'||tool==='arrow')drawings.push({kind:tool,a:start,b:end});drawing=false;render()};
 function render(){ctx.clearRect(0,0,canvas.width,canvas.height);drawings.forEach(d=>{ctx.strokeStyle='#62e6bd';ctx.fillStyle='#62e6bd';ctx.lineWidth=3;ctx.beginPath();if(d.kind==='angle'){ctx.moveTo(d.a.x,d.a.y);ctx.lineTo(d.b.x,d.b.y);ctx.lineTo(d.c.x,d.c.y);ctx.stroke();ctx.fillStyle='#f7d774';ctx.font='bold 17px sans-serif';[['A',d.a],['B',d.b],['C',d.c]].forEach(([l,p])=>ctx.fillText(l,p.x+8,p.y-8));ctx.fillStyle='#62e6bd';ctx.fillText(d.label,d.b.x+8,d.b.y+24)}else{ctx.moveTo(d.a.x,d.a.y);ctx.lineTo(d.b.x,d.b.y);ctx.stroke();if(d.kind==='arrow'){const ang=Math.atan2(d.b.y-d.a.y,d.b.x-d.a.x);ctx.beginPath();ctx.moveTo(d.b.x,d.b.y);ctx.lineTo(d.b.x-14*Math.cos(ang-.5),d.b.y-14*Math.sin(ang-.5));ctx.lineTo(d.b.x-14*Math.cos(ang+.5),d.b.y-14*Math.sin(ang+.5));ctx.closePath();ctx.fill()}}});if(calibrationPoints.length){ctx.fillStyle='#f7d774';ctx.strokeStyle='#f7d774';ctx.font='bold 17px sans-serif';calibrationPoints.forEach((p,i)=>{ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);ctx.fill();ctx.fillText(i?'B':'A',p.x+9,p.y-9)});if(calibrationPoints.length===2){ctx.beginPath();ctx.moveTo(calibrationPoints[0].x,calibrationPoints[0].y);ctx.lineTo(calibrationPoints[1].x,calibrationPoints[1].y);ctx.stroke()}}}window.onresize=resize;
-$('#exportBtn').onclick=()=>{const data={title:$('#sessionTitle').value,note:$('#overallNote').value,calibration:{wheelbaseCm:calibrations.wheelbase?.cm||null,shoeLengthCm:calibrations.shoe?.cm||null},markers:markers.map(m=>({...m,time:fmt(m.time)})),startEvents:startEvents.map((s,i)=>({...s,index:i+1,time:fmt(s.time)})),stepEvents,audioAnalysis:window.lastAudioAnalysis||null};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='運動復盤摘要.json';a.click()};
+$('#exportBtn').onclick=()=>{const data={title:$('#sessionTitle').value,note:$('#overallNote').value,calibration:{objectDistanceCm:calibrations.object?.cm||null,wheelbaseCm:calibrations.wheelbase?.cm||null,shoeLengthCm:calibrations.shoe?.cm||null},markers:markers.map(m=>({...m,time:fmt(m.time)})),startEvents:startEvents.map((s,i)=>({...s,index:i+1,time:fmt(s.time)})),stepEvents,audioAnalysis:window.lastAudioAnalysis||null};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='運動復盤摘要.json';a.click()};
 
 function scaleCmPerPixel(){return calibrations.wheelbase?.cmPerPixel||calibrations.shoe?.cmPerPixel||null}
 function addStep(foot){stepEvents.push({time:video.currentTime,foot});renderStepAnalysis()}
@@ -25,7 +25,7 @@ $('#leftStepBtn').onclick=()=>addStep('left');$('#rightStepBtn').onclick=()=>add
 document.querySelectorAll('input[name="singleFoot"]').forEach(r=>r.addEventListener('change',renderSingleFootAnalysis));$('#refreshSingleFootBtn')?.addEventListener('click',renderSingleFootAnalysis);$('#exportSingleFootBtn')?.addEventListener('click',()=>{const scale=scaleCmPerPixel(),csv=['index,foot,contact_s,takeoff_s,stance_s,flight_s,cycle_s,height_'+(scale?'cm':'px'),...singleFootRows.map(r=>[r.index,r.foot,r.contact.toFixed(3),r.takeoff.toFixed(3),r.stance.toFixed(3),r.flight.toFixed(3),r.cycle.toFixed(3),(scale?r.heightCm:r.heightPx).toFixed(1)].join(','))].join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='單腳離地數據.csv';a.click()});
 
 async function seekTo(t){if(Math.abs(video.currentTime-t)<.002)return;await new Promise(resolve=>{const done=()=>{video.removeEventListener('seeked',done);resolve()};video.addEventListener('seeked',done);video.currentTime=t})}
-let waveformData=null,liveAudioContext=null,liveAnalyser=null,liveAudioSource=null,liveWaveformTimer=null,liveWaveformBins=[],waveformZoom=1,waveformFileKey=null;
+let waveformData=null,liveAudioContext=null,liveAnalyser=null,liveAudioSource=null,liveWaveformTimer=null,liveWaveformBins=[],waveformZoom=1,waveformFileKey=null,sharedTimelineContentWidth=1;
 const waveformCanvas=$('#audioWaveform'),waveformCtx=waveformCanvas?.getContext('2d');
 function drawWaveform(){
   if(!waveformCanvas||!waveformCtx)return;
@@ -33,7 +33,7 @@ function drawWaveform(){
   // The waveform uses the exact same content width as the editor timeline.
   // Keeping one coordinate system makes the red playhead and all timeline
   // markers line up at every zoom level.
-  const wrap=waveformCanvas.parentElement,r=waveformCanvas.getBoundingClientRect(),d=devicePixelRatio||1,w=Math.max(1,typeof editorTimelineWidth==='function'?editorTimelineWidth():(wrap?.clientWidth||r.width)*waveformZoom),h=Math.max(1,r.height),mid=h/2;
+  const wrap=waveformCanvas.parentElement,r=waveformCanvas.getBoundingClientRect(),d=devicePixelRatio||1,w=Math.max(1,sharedTimelineContentWidth||((wrap?.clientWidth||r.width)*waveformZoom)),h=Math.max(1,r.height||92),mid=h/2;
   waveformCanvas.style.width=`${w}px`;
   waveformCanvas.width=w*d;waveformCanvas.height=h*d;waveformCtx.setTransform(d,0,0,d,0,0);waveformCtx.clearRect(0,0,w,h);
   waveformCtx.fillStyle='#0a1424';waveformCtx.fillRect(0,0,w,h);
@@ -192,7 +192,7 @@ function addTimelineEvent(body,time,kind,label,draggable=false,onMove=null){
 }
 function refreshEditorTimeline(){
   const root=$('#editorTimeline');if(!root||!video.duration)return;
-  const width=editorTimelineWidth();document.querySelectorAll('.timeline-track,.track-body,.timeline-ruler').forEach(el=>{el.style.width=`${width}px`;el.style.minWidth=`${width}px`;el.style.flex=`0 0 ${width}px`});
+  const width=editorTimelineWidth();sharedTimelineContentWidth=width;document.querySelectorAll('.timeline-track,.track-body,.timeline-ruler').forEach(el=>{el.style.width=`${width}px`;el.style.minWidth=`${width}px`;el.style.flex=`0 0 ${width}px`});
   const ruler=$('#timelineRuler');ruler.innerHTML='';const tickCount=Math.max(2,Math.ceil(video.duration));
   for(let i=0;i<=tickCount;i++){const t=Math.min(video.duration,i);const tick=document.createElement('span');tick.className='ruler-tick';tick.style.left=`${timelinePercent(t)}%`;tick.textContent=fmt(t).slice(0,5);ruler.appendChild(tick)}
   ['frameTrack','leftTrack','rightTrack','startTrack','angleTrack','noteTrack'].forEach(id=>{const el=$(`#${id}`);if(el)el.innerHTML=''});
@@ -578,30 +578,33 @@ function setAnalysisMode(mode){
 document.querySelectorAll('.mode-tab').forEach(tab=>tab.addEventListener('click',()=>setAnalysisMode(tab.dataset.mode)));
 setAnalysisMode('linear');
 
-// Extra 50 cm reference calibration and robust start markers.  The reference
-// calibration is intentionally preferred because it is the object Han wants
-// to use for the start-distance measurement.
-calibrations.object50=calibrations.object50||null;
+// User-defined object reference calibration. It is preferred for distance
+// measurements, while the other known object remains available for comparison.
+calibrations.object=calibrations.object||null;
 const originalScaleCmPerPixel=scaleCmPerPixel;
-scaleCmPerPixel=function(){return calibrations.object50?.cmPerPixel||originalScaleCmPerPixel()};
+scaleCmPerPixel=function(){return calibrations.object?.cmPerPixel||originalScaleCmPerPixel()};
 const originalCalibrationStatus=updateCalibrationStatus;
 updateCalibrationStatus=function(message){
   const box=$('#calibrationStatus');if(!box)return;
   if(message){box.textContent=message;return}
-  const o=calibrations.object50,w=calibrations.wheelbase,s=calibrations.shoe;
+  const o=calibrations.object,w=calibrations.wheelbase,s=calibrations.shoe;
   if(!o&&!w&&!s){box.textContent='尚未設定比例尺';return}
-  const text=[];if(o)text.push(`物件 50 cm：${o.px.toFixed(1)} px（目前使用）`);if(w)text.push(`軸距：${w.cm} cm`);if(s)text.push(`鞋長：${s.cm} cm`);box.textContent=text.join('　');
+  const text=[];if(o)text.push(`物件 ${o.cm} cm：${o.px.toFixed(1)} px（目前使用）`);if(w)text.push(`軸距：${w.cm} cm`);if(s)text.push(`鞋長：${s.cm} cm`);
+  const ref=w||s;if(o&&ref){const diff=Math.abs((o.cmPerPixel-ref.cmPerPixel)/ref.cmPerPixel*100);text.push(`物件↔${w?'軸距':'鞋長'}差異：${diff.toFixed(1)}%｜${diff<=5?'比例一致':'請檢查兩物件是否在同一深度'}`)}
+  box.textContent=text.join('　');
 };
-function finishObject50Calibration(){
-  if(calibrationPoints.length!==2){updateCalibrationStatus('請先在畫面點選 50 公分物件的兩端');return}
+function finishObjectCalibration(){
+  const cm=Number($('#objectDistanceCm')?.value);
+  if(!Number.isFinite(cm)||cm<=0){updateCalibrationStatus('請先輸入物件實際距離（公分）');return}
+  if(calibrationPoints.length!==2){updateCalibrationStatus('請在畫面點選物件距離的兩端');return}
   const px=Math.hypot(calibrationPoints[1].x-calibrationPoints[0].x,calibrationPoints[1].y-calibrationPoints[0].y);
-  calibrations.object50={cm:50,px,cmPerPixel:50/px};calibrationMode=null;calibrationPoints=[];updateCalibrationStatus();render();
+  calibrations.object={cm,px,cmPerPixel:cm/px};calibrationMode=null;calibrationPoints=[];updateCalibrationStatus();render();
 }
 const originalFinishCalibration=finishCalibration;
-finishCalibration=function(){if(calibrationMode==='object50')finishObject50Calibration();else originalFinishCalibration()};
-$('#object50Btn')?.addEventListener('click',()=>{calibrationMode='object50';calibrationPoints=[];tool='select';updateCalibrationStatus('請在畫面點選 50 公分物件的兩端')});
-const oldEnable=enable;enable=()=>{oldEnable();if($('#object50Btn'))$('#object50Btn').disabled=false};
-$('#clearVideoBtn')?.addEventListener('click',()=>{calibrations.object50=null;updateCalibrationStatus()});
+finishCalibration=function(){if(calibrationMode==='object')finishObjectCalibration();else originalFinishCalibration()};
+$('#objectDistanceBtn')?.addEventListener('click',()=>{const cm=Number($('#objectDistanceCm')?.value);if(!Number.isFinite(cm)||cm<=0){updateCalibrationStatus('請先輸入物件實際距離（公分）');$('#objectDistanceCm')?.focus();return}calibrationMode='object';calibrationPoints=[];tool='select';updateCalibrationStatus(`請在畫面點選 ${cm} cm 物件的兩端`)});
+const oldEnable=enable;enable=()=>{oldEnable();if($('#objectDistanceBtn'))$('#objectDistanceBtn').disabled=false};
+$('#clearVideoBtn')?.addEventListener('click',()=>{calibrations.object=null;updateCalibrationStatus()});
 
 const originalRenderContactMarkers=renderContactMarkers;
 renderContactMarkers=function(){
