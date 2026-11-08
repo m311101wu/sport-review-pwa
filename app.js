@@ -617,3 +617,20 @@ drawStartVelocityOverlay=function(){
     [[a,'0s'],[b,'1s']].forEach(([p,label])=>{if(!p)return;ctx.fillStyle=label==='0s'?'#62e6bd':'#f7d774';ctx.strokeStyle='#091322';ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#091322';ctx.fillText(`${i+1} ${label}`,p.x,p.y-14)});
   });ctx.restore();
 };
+
+// Keep canvas overlays in sync while the video is playing.  Without this,
+// the old wheel points remain painted until another manual render happens.
+video.addEventListener('timeupdate',()=>{
+  if(startEvents.some(item=>item.startWheelPoint||item.halfWheelPoint))render();
+});
+
+// Keep the red playhead inside the visible part of the zoomed timeline.
+const originalPositionTimelinePlayhead=positionTimelinePlayhead;
+positionTimelinePlayhead=function(){
+  originalPositionTimelinePlayhead();
+  const playhead=$('#timelinePlayhead'),scroll=$('#timelineScroll');
+  if(!playhead||!scroll)return;
+  const left=playhead.offsetLeft,margin=48,viewLeft=scroll.scrollLeft,viewRight=viewLeft+scroll.clientWidth;
+  if(left<viewLeft+margin)scroll.scrollLeft=Math.max(0,left-margin);
+  else if(left>viewRight-margin)scroll.scrollLeft=Math.min(scroll.scrollWidth-scroll.clientWidth,left-scroll.clientWidth+margin);
+};
