@@ -5,15 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0b1220" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <title>動作復盤</title>
+  <title>直線跑姿分析｜起跑分析</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
-      <div><p class="eyebrow">SPORT REVIEW</p><h1>動作復盤</h1></div>
+      <div><p class="eyebrow">SPORT REVIEW</p><h1 id="pageTitle">直線跑姿分析</h1></div>
       <label class="upload-button">選擇影片<input id="videoInput" type="file" accept="video/*" /></label>
     </header>
+
+    <nav class="mode-tabs" aria-label="分析分頁">
+      <button type="button" class="mode-tab active" data-mode="linear">直線跑姿分析</button>
+      <button type="button" class="mode-tab" data-mode="start">起跑分析</button>
+    </nav>
 
     <section class="workspace">
       <div class="video-panel">
@@ -50,8 +55,9 @@
           <div class="timeline-scroll" id="timelineScroll">
             <div class="timeline-ruler" id="timelineRuler"></div>
             <div class="timeline-track"><span class="track-label">影格</span><div class="track-body" id="frameTrack"></div></div>
-            <div class="timeline-track"><span class="track-label right-track">右腳</span><div class="track-body" id="rightTrack"></div></div>
-            <div class="timeline-track"><span class="track-label left-track">左腳</span><div class="track-body" id="leftTrack"></div></div>
+            <div class="timeline-track foot-track" id="rightFootTrack"><span class="track-label right-track">右腳</span><div class="track-body" id="rightTrack"></div></div>
+            <div class="timeline-track foot-track" id="leftFootTrack"><span class="track-label left-track">左腳</span><div class="track-body" id="leftTrack"></div></div>
+            <div class="timeline-track start-track"><span class="track-label start-track-label">起跑</span><div class="track-body" id="startTrack"></div></div>
             <div class="timeline-track"><span class="track-label angle-track">角度</span><div class="track-body" id="angleTrack"></div></div>
             <div class="timeline-track"><span class="track-label note-track">備註</span><div class="track-body" id="noteTrack"></div></div>
             <div class="timeline-playhead" id="timelinePlayhead"></div>
@@ -86,7 +92,7 @@
           <div><button id="saveMarkerBtn" class="primary">儲存標記</button><button id="cancelMarkerBtn">取消</button></div>
         </div>
         <div id="markerList" class="marker-list"><div class="empty-list">影片載入後，可以在關鍵動作建立標記。</div></div>
-        <section class="analysis-card">
+        <section class="analysis-card linear-analysis-panel" id="linearAnalysisPanel">
           <div class="panel-heading compact"><div><p class="eyebrow">RUN ANALYSIS</p><h3>步頻與步態數據</h3></div><button id="clearStepsBtn" class="small-button" disabled>清除</button></div>
           <p class="hint">鍵盤 ↑：右腳點地／再按一次右腳離地；↓：左腳點地／再按一次左腳離地。←／→ 逐幀。</p>
           <div class="analysis-mode"><label><input type="radio" name="analysisMode" value="steps" checked> 步數／步頻</label><label><input type="radio" name="analysisMode" value="cycles"> 步態週期</label><label><input type="radio" name="analysisMode" value="single"> 單腳離地數據</label></div>
@@ -113,6 +119,15 @@
             <div class="single-foot-stats"><div><b id="alternateLeftRight">—</b><span>左→右</span></div><div><b id="alternateRightLeft">—</b><span>右→左</span></div><div><b id="alternateDiff">—</b><span>差異</span></div><div><b id="alternateCycleAvg">—</b><span>平均完整週期</span></div><div><b id="alternateCount">0</b><span>完整交替組</span></div></div>
             <div class="analysis-table-wrap"><table><thead><tr><th>#</th><th>順序</th><th>第1腳</th><th>第2腳</th><th>第3腳</th><th>第1→2</th><th>第2→3</th><th>較長段</th><th>完整週期</th></tr></thead><tbody id="alternateTable"><tr><td colspan="9" class="empty-cell">請依序標記左腳→右腳→左腳</td></tr></tbody></table></div>
           </section>
+        </section>
+        <section class="start-analysis-card hidden" id="startAnalysisPanel" aria-label="起跑分析">
+          <div class="panel-heading compact"><div><p class="eyebrow">START ANALYSIS</p><h3>起跑分析</h3></div><button id="clearStartsBtn" class="small-button" type="button" disabled>清除</button></div>
+          <p class="hint">把影片停在每次起跑開始的瞬間，按「標記起跑」。一支影片可以記錄多次起跑；點擊列表或時間軸上的標記會跳到該時間。</p>
+          <div class="start-input-row"><label>第一步距離 <input id="firstStepDistanceCm" type="number" min="0" step="0.1" placeholder="可選，cm" /> <span>cm</span></label><button id="addStartBtn" class="primary" type="button" disabled>標記目前起跑</button></div>
+          <div id="startAnalysisHint" class="analysis-hint">尚未標記起跑</div>
+          <div class="start-stats"><div><b id="startCount">0</b><span>起跑次數</span></div><div><b id="startFirstDistanceAvg">—</b><span>第一步平均距離</span></div><div><b id="startBestFirstDistance">—</b><span>最長第一步</span></div></div>
+          <div class="analysis-table-wrap"><table><thead><tr><th>#</th><th>起跑時間</th><th>第一步距離</th><th>管理</th></tr></thead><tbody id="startTable"><tr><td colspan="4" class="empty-cell">尚未標記起跑</td></tr></tbody></table></div>
+          <p class="hint">第一步距離可先輸入估計值；之後也可以用比例尺或場地標線補上。距離不填時仍會保留起跑時間。</p>
         </section>
         <div class="summary-card"><label for="sessionTitle">本次訓練名稱</label><input id="sessionTitle" value="我的運動復盤" /><label for="overallNote">整體訓練筆記</label><textarea id="overallNote" rows="4" placeholder="今天做得好的地方、下次要改善的地方…"></textarea><button id="exportBtn" class="wide" disabled>匯出復盤摘要</button></div>
       </aside>
