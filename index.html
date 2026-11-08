@@ -122,11 +122,11 @@
         </section>
         <section class="start-analysis-card hidden" id="startAnalysisPanel" aria-label="起跑分析">
           <div class="panel-heading compact"><div><p class="eyebrow">START ANALYSIS</p><h3>起跑分析</h3></div><button id="clearStartsBtn" class="small-button" type="button" disabled>清除</button></div>
-          <p class="hint">把影片停在每次起跑開始的瞬間，按「標記起跑」。一支影片可以記錄多次起跑；點擊列表或時間軸上的標記會跳到該時間。</p>
+          <p class="hint">把影片停在每次起跑開始的瞬間，按「標記目前起跑」，接著在影片點起跑瞬間的前輪；系統會自動跳到 1 秒後，再點一次前輪即可完成位移與初速度。一支影片可以記錄多次起跑。</p>
           <div class="start-input-row"><label>第一步距離 <input id="firstStepDistanceCm" type="number" min="0" step="0.1" placeholder="可選，cm" /> <span>cm</span></label><button id="addStartBtn" class="primary" type="button" disabled>標記目前起跑</button></div>
           <div id="startAnalysisHint" class="analysis-hint">尚未標記起跑</div>
           <div class="start-stats"><div><b id="startCount">0</b><span>起跑次數</span></div><div><b id="startFirstDistanceAvg">—</b><span>第一步平均距離</span></div><div><b id="startBestFirstDistance">—</b><span>最長第一步</span></div></div>
-          <div class="analysis-table-wrap"><table><thead><tr><th>#</th><th>起跑時間</th><th>0.5 秒</th><th>第一步距離</th><th>前輪位移</th><th>初速度</th><th>管理</th></tr></thead><tbody id="startTable"><tr><td colspan="7" class="empty-cell">尚未標記起跑</td></tr></tbody></table></div>
+          <div class="analysis-table-wrap"><table><thead><tr><th>#</th><th>起跑時間</th><th>1 秒後</th><th>第一步距離</th><th>前輪位移</th><th>初速度</th><th>管理</th></tr></thead><tbody id="startTable"><tr><td colspan="7" class="empty-cell">尚未標記起跑</td></tr></tbody></table></div>
           <p class="hint">第一步距離可先輸入估計值；之後也可以用比例尺或場地標線補上。距離不填時仍會保留起跑時間。</p>
         </section>
         <div class="summary-card"><label for="sessionTitle">本次訓練名稱</label><input id="sessionTitle" value="我的運動復盤" /><label for="overallNote">整體訓練筆記</label><textarea id="overallNote" rows="4" placeholder="今天做得好的地方、下次要改善的地方…"></textarea><button id="exportBtn" class="wide" disabled>匯出復盤摘要</button></div>
